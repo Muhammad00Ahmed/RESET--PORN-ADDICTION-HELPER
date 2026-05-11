@@ -1,75 +1,127 @@
 "use client";
-import { motion, AnimatePresence } from "framer-motion";
+
+import { AnimatePresence, motion } from "framer-motion";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useState, useEffect, useRef, Suspense } from "react";
+import Link from "next/link";
 import { useAppStore } from "../../lib/store";
 import { api, InterventionResponse } from "../../lib/api";
 import { CoachMessage } from "../../components/CoachMessage";
 import { InterventionAction } from "../../components/InterventionAction";
 import { LoadingState } from "../../components/LoadingState";
 import { Button } from "../../components/Button";
-import Link from "next/link";
+import { ResetAudioEngine, AudioMode } from "../../lib/audioEngine";
 
 type Mode = "URGE" | "VULNERABILITY" | "RECOVERY";
 
-const modeConfig = {
+type ModeConfig = {
+  bg: string;
+  accent: string;
+  label: string;
+  heading: string;
+  description: string;
+  placeholder: string;
+  defaultMessage: string;
+};
+
+const modeConfig: Record<Mode, ModeConfig> = {
   URGE: {
-    bg: "#0D0303",
+    bg: "#100503",
     accent: "#FF3333",
-    label: "CRISIS MODE",
-    placeholder: "What's happening right now?",
-    defaultMessage: "I feel an urge and I need help right now",
+    label: "CRISIS INTERVENTION",
+    heading: "Pull the urge out into the open.",
+    description:
+      "This mode is here to transform pressure into action. Ground the feeling, make a clear choice, and step back from impulsive momentum.",
+    placeholder: "Describe what’s happening in the moment.",
+    defaultMessage: "I feel an urge and I need help right now.",
   },
   VULNERABILITY: {
-    bg: "#0D0D03",
+    bg: "#120f08",
     accent: "#F5A623",
-    label: "VULNERABILITY",
-    placeholder: "What are you feeling right now?",
-    defaultMessage: "I'm feeling vulnerable and need support",
+    label: "SOFT SPACE",
+    heading: "Name the feeling without judgment.",
+    description:
+      "This space helps you listen to what is actually underneath the impulse. Vulnerability is a signal. The coach is a gentle mirror.",
+    placeholder: "Share what you are feeling right now.",
+    defaultMessage: "I’m feeling vulnerable and need support.",
   },
   RECOVERY: {
-    bg: "#030D06",
+    bg: "#061207",
     accent: "#1DB954",
-    label: "RECOVERY",
+    label: "RECOVERY REPORT",
+    heading: "Strengthen what you did right.",
+    description:
+      "Recovery is about honoring progress and choosing the next best move. Reflect on the moment to make your calm routine more resilient.",
     placeholder: "How are you doing today?",
-    defaultMessage: "I want to check in on my progress",
+    defaultMessage: "I want to check in on my progress.",
   },
+};
+
+const getDemoResponse = (mode: Mode, urgency: number): InterventionResponse => {
+  const responses: Record<Mode, Omit<InterventionResponse, "mode" | "urgencyScore">> = {
+    URGE: {
+      message:
+        "Stand up now. Breathe slow. The urge is a waveform — it will pass if you don’t chase it. Move through it with intention.",
+      actionSteps: ["Stand and breathe", "Drink a full glass of water", "Move your body for 60 seconds"],
+      context: { streak: 0, disciplineScore: 0 },
+    },
+    VULNERABILITY: {
+      message:
+        "This feeling is speaking. Ask yourself: what does it really want? A connection, a break, or a pause? Choose one small human response.",
+      actionSteps: ["Name the emotion", "Write one honest sentence", "Reach out to someone real"],
+      context: { streak: 0, disciplineScore: 0 },
+    },
+    RECOVERY: {
+      message:
+        "You are accumulating calm through each choice. Reflect on what changed, then decide one simple next step that supports the reset.",
+      actionSteps: ["Log today’s win", "Describe one thing learned", "Plan a small morning anchor"],
+      context: { streak: 0, disciplineScore: 0 },
+    },
+  };
+
+  return {
+    ...responses[mode],
+    mode,
+    urgencyScore: urgency,
+  };
 };
 
 function CoachPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { userId, user, setUser } = useAppStore();
-
-  const initialMode = (searchParams.get("mode") as Mode) || "RECOVERY";
-  const initialUrgency = parseInt(searchParams.get("urgency") || "5", 10);
-
-  const [mode, setMode] = useState<Mode>(initialMode);
+  const { userId, user } = useAppStore();
+  const [mode, setMode] = useState<Mode>((searchParams.get("mode") as Mode) || "RECOVERY");
   const [message, setMessage] = useState("");
-  const [urgencyScore, setUrgencyScore] = useState(initialUrgency);
+  const [urgencyScore, setUrgencyScore] = useState(parseInt(searchParams.get("urgency") || "5", 10));
   const [response, setResponse] = useState<InterventionResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [autoSent, setAutoSent] = useState(false);
+  const audioRef = useRef<ResetAudioEngine | null>(null);
 
   const config = modeConfig[mode];
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  // Auto-send for urge mode
-  useEffect(() => {
-    if (initialMode === "URGE" && !autoSent) {
-      setAutoSent(true);
-      setTimeout(() => {
-        sendMessage(modeConfig.URGE.defaultMessage, "URGE", initialUrgency);
-      }, 300);
-    }
-  }, [initialMode]);
 
   useEffect(() => {
-    if (inputRef.current && initialMode !== "URGE") {
-      inputRef.current.focus();
+    if (typeof window !== "undefined") {
+      audioRef.current = new ResetAudioEngine();
+      audioRef.current.setMode(mode === "URGE" ? "URGE" : mode === "VULNERABILITY" ? "VULNERABILITY" : "CALM");
     }
   }, []);
+
+  useEffect(() => {
+    audioRef.current?.setMode(mode === "URGE" ? "URGE" : mode === "VULNERABILITY" ? "VULNERABILITY" : "CALM");
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode === "URGE" && !autoSent) {
+      setAutoSent(true);
+      setTimeout(() => sendMessage(config.defaultMessage, "URGE", urgencyScore), 250);
+    }
+  }, [mode, autoSent, config.defaultMessage, urgencyScore]);
+
+  const speakResponse = (text: string) => {
+    audioRef.current?.speak(text, { rate: 0.94, pitch: 1.0 });
+  };
 
   const sendMessage = async (
     msg: string,
@@ -80,22 +132,23 @@ function CoachPageInner() {
     const finalMode = overrideMode || mode;
     const finalUrgency = overrideUrgency ?? urgencyScore;
 
-    if (!finalMessage.trim()) return;
+    if (!finalMessage.trim()) {
+      setError("Describe your experience so the coach can respond.");
+      return;
+    }
+
     setLoading(true);
     setError("");
 
     try {
+      await audioRef.current?.resume();
       const effectiveUserId = userId || "demo-user";
-      const result = await api.intervene(
-        effectiveUserId,
-        finalMessage,
-        finalUrgency
-      );
+      const result = await api.intervene(effectiveUserId, finalMessage, finalUrgency);
 
       setResponse(result);
       setMode(result.mode as Mode);
+      speakResponse(result.message);
 
-      // Log the interaction
       if (userId) {
         await api.createLog({
           userId,
@@ -105,9 +158,9 @@ function CoachPageInner() {
         });
       }
     } catch (e) {
-      // Demo fallback when API is unavailable
       const demoResponse = getDemoResponse(finalMode, finalUrgency);
       setResponse(demoResponse);
+      speakResponse(demoResponse.message);
     } finally {
       setLoading(false);
     }
@@ -115,365 +168,230 @@ function CoachPageInner() {
 
   return (
     <div
-      style={{
-        minHeight: "100vh",
-        background: config.bg,
-        transition: "background 0.6s ease",
-        display: "flex",
-        flexDirection: "column",
-      }}
+      className="relative min-h-screen overflow-hidden bg-slate-950 text-white"
+      style={{ background: config.bg }}
     >
-      {/* Mode-colored top bar */}
-      <div
-        style={{
-          height: "3px",
-          background: config.accent,
-          transition: "background 0.4s ease",
-        }}
-      />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.08),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(255,255,255,0.05),_transparent_30%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-black/50" />
+      <div className="relative z-20 mx-auto max-w-[1200px] px-6 py-8 sm:px-10">
+        <header className="mb-10 flex flex-col gap-5 rounded-[32px] border border-white/10 bg-white/5 p-6 shadow-panel backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-slate-300 transition hover:text-white">
+              ← Return to RESET
+            </Link>
+            <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Cinematic coach</p>
+            <h1 className="text-3xl font-heading tracking-[-0.04em] text-white sm:text-4xl">{config.heading}</h1>
+          </div>
 
-      {/* Header */}
-      <header
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "20px 24px",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
-        }}
-      >
-        <Link
-          href="/"
-          style={{
-            fontFamily: "var(--font-body)",
-            fontSize: "13px",
-            color: "#4A4A4E",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-          }}
-        >
-          ← Back
-        </Link>
+          <div className="grid gap-3 sm:text-right">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-4 py-3 text-sm text-slate-200">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: config.accent }} />
+              {config.label}
+            </div>
+            <div className="rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
+              Streak: <span className="font-semibold text-white">{user?.streak ?? 0} days</span>
+            </div>
+          </div>
+        </header>
 
-        {/* Mode switcher */}
-        <div
-          style={{
-            display: "flex",
-            gap: "4px",
-            background: "rgba(255,255,255,0.05)",
-            borderRadius: "var(--r-full)",
-            padding: "4px",
-          }}
-        >
-          {(["URGE", "VULNERABILITY", "RECOVERY"] as Mode[]).map((m) => (
-            <button
-              key={m}
-              onClick={() => {
-                setMode(m);
-                setResponse(null);
-              }}
-              style={{
-                background: mode === m ? modeConfig[m].accent : "transparent",
-                border: "none",
-                borderRadius: "var(--r-full)",
-                padding: "6px 12px",
-                fontSize: "10px",
-                fontWeight: 600,
-                letterSpacing: "0.08em",
-                cursor: "pointer",
-                color: mode === m ? "#0A0A0B" : "#4A4A4E",
-                fontFamily: "var(--font-body)",
-                transition: "all 0.2s ease",
-              }}
-            >
-              {m.slice(0, 3)}
-            </button>
-          ))}
-        </div>
-
-        {/* Streak indicator */}
-        <div
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: "13px",
-            color: "#4A4A4E",
-          }}
-        >
-          <span style={{ color: config.accent }}>{user?.streak || 0}</span>d
-        </div>
-      </header>
-
-      {/* Main */}
-      <main
-        style={{
-          flex: 1,
-          padding: "32px 24px",
-          maxWidth: "680px",
-          margin: "0 auto",
-          width: "100%",
-        }}
-      >
-        {/* Mode label */}
-        <motion.div
-          key={mode}
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          style={{
-            fontFamily: "var(--font-heading)",
-            fontSize: "13px",
-            letterSpacing: "0.15em",
-            color: config.accent,
-            marginBottom: "32px",
-          }}
-        >
-          {config.label}
-        </motion.div>
-
-        {/* Loading state */}
-        <AnimatePresence>
-          {loading && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <LoadingState
-                message={
-                  mode === "URGE"
-                    ? "Interrupting the loop..."
-                    : mode === "VULNERABILITY"
-                    ? "Redirecting..."
-                    : "Loading your coach..."
-                }
-                mode={mode}
-                size="lg"
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Response */}
-        <AnimatePresence>
-          {!loading && response && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              style={{ marginBottom: "32px" }}
-            >
-              <CoachMessage
-                message={response.message}
-                mode={response.mode as Mode}
-                actionSteps={response.actionSteps}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Intervention actions */}
-        <AnimatePresence>
-          {!loading && response && (
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              style={{ marginBottom: "32px" }}
-            >
-              <InterventionAction
-                mode={response.mode as Mode}
-                onComplete={() => {
-                  if (userId) {
-                    api.createLog({
-                      userId,
-                      type: "SUCCESS",
-                      note: "Completed intervention action",
-                    });
-                  }
-                }}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Input area */}
-        {(!response || !loading) && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: response ? 0.6 : 0.2 }}
-          >
-            {response && (
-              <div
-                style={{
-                  fontFamily: "var(--font-body)",
-                  fontSize: "13px",
-                  color: "#4A4A4E",
-                  marginBottom: "12px",
-                }}
-              >
-                Continue the conversation
-              </div>
-            )}
-
-            {/* Urgency slider for URGE mode */}
-            {mode === "URGE" && !response && (
-              <div style={{ marginBottom: "16px" }}>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: "8px",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontFamily: "var(--font-body)",
-                      fontSize: "12px",
-                      color: "#8A8A8E",
-                    }}
-                  >
-                    Urge intensity
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: "12px",
-                      color: "#FF3333",
-                    }}
-                  >
-                    {urgencyScore}/10
-                  </span>
+        <div className="grid gap-8 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="space-y-6">
+            <section className="rounded-[32px] border border-white/10 bg-black/70 p-8 shadow-panel backdrop-blur-xl">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="max-w-2xl">
+                  <p className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">{config.label}</p>
+                  <p className="mt-4 text-base leading-7 text-slate-300">{config.description}</p>
                 </div>
-                <input
-                  type="range"
-                  min={1}
-                  max={10}
-                  value={urgencyScore}
-                  onChange={(e) => setUrgencyScore(parseInt(e.target.value, 10))}
-                  style={{ width: "100%", accentColor: "#FF3333" }}
-                />
+                <div className="grid gap-2 rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
+                  <div className="text-xs uppercase tracking-[0.3em] text-slate-500">Urgency</div>
+                  <div className="text-lg font-semibold text-white">{urgencyScore}/10</div>
+                  <div className="text-xs uppercase tracking-[0.3em] text-slate-500">Mode</div>
+                  <div className="text-lg font-semibold text-white">{mode}</div>
+                </div>
               </div>
-            )}
+            </section>
 
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "12px",
-              }}
-            >
-              <textarea
-                ref={inputRef}
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage(message);
-                  }
-                }}
-                placeholder={config.placeholder}
-                rows={3}
-                style={{
-                  background: "rgba(255,255,255,0.04)",
-                  border: `1px solid ${config.accent}33`,
-                  borderRadius: "var(--r-lg)",
-                  padding: "16px",
-                  color: "#F2F2F0",
-                  fontFamily: "var(--font-body)",
-                  fontSize: "15px",
-                  resize: "none",
-                  outline: "none",
-                  lineHeight: 1.6,
-                  transition: "border-color 0.2s",
-                }}
-              />
-
-              {error && (
-                <p style={{ color: "#FF3333", fontSize: "13px" }}>{error}</p>
+            <AnimatePresence mode="wait">
+              {loading ? (
+                <motion.section
+                  key="coach-loading"
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -16 }}
+                  className="rounded-[32px] border border-white/10 bg-white/5 p-8 shadow-panel backdrop-blur-xl"
+                >
+                  <LoadingState
+                    message={
+                      mode === "URGE"
+                        ? "Interrupting the loop..."
+                        : mode === "VULNERABILITY"
+                        ? "Reflecting with care..."
+                        : "Reinforcing progress..."
+                    }
+                    mode={mode}
+                    size="lg"
+                  />
+                </motion.section>
+              ) : response ? (
+                <motion.section
+                  key="coach-response"
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -16 }}
+                  className="rounded-[32px] border border-white/10 bg-white/5 p-8 shadow-panel backdrop-blur-xl"
+                >
+                  <CoachMessage
+                    message={response.message}
+                    mode={response.mode as Mode}
+                    actionSteps={response.actionSteps}
+                  />
+                </motion.section>
+              ) : (
+                <motion.section
+                  key="coach-prompt"
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -16 }}
+                  className="rounded-[32px] border border-white/10 bg-white/5 p-8 shadow-panel backdrop-blur-xl"
+                >
+                  <div className="space-y-4">
+                    <div className="text-sm uppercase tracking-[0.3em] text-slate-400">Ready for a guided reset</div>
+                    <p className="text-lg leading-8 text-slate-200">Type how you feel right now, or let the coach step in immediately using the urgency prompt.</p>
+                  </div>
+                </motion.section>
               )}
+            </AnimatePresence>
 
-              <div
-                style={{
-                  display: "flex",
-                  gap: "12px",
-                  justifyContent: "flex-end",
-                }}
-              >
-                {response && (
+            <section className="grid gap-4 rounded-[32px] border border-white/10 bg-black/70 p-8 shadow-panel backdrop-blur-xl">
+              <div className="flex flex-wrap items-center gap-3">
+                {(["URGE", "VULNERABILITY", "RECOVERY"] as Mode[]).map((option) => (
+                  <button
+                    key={option}
+                    onClick={() => {
+                      setMode(option);
+                      setResponse(null);
+                      setError("");
+                    }}
+                    className={`rounded-full px-5 py-3 text-sm font-semibold uppercase tracking-[0.2em] transition ${
+                      mode === option
+                        ? "bg-white text-slate-950"
+                        : "bg-white/5 text-slate-300 hover:bg-white/10"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid gap-4">
+                {mode === "URGE" && (
+                  <div className="space-y-3 rounded-3xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex items-center justify-between text-sm uppercase tracking-[0.2em] text-slate-400">
+                      <span>Urgency intensity</span>
+                      <span className="text-white">{urgencyScore}/10</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={1}
+                      max={10}
+                      value={urgencyScore}
+                      onChange={(event) => setUrgencyScore(parseInt(event.target.value, 10))}
+                      className="w-full accent-rose-400"
+                    />
+                  </div>
+                )}
+                <textarea
+                  value={message}
+                  onChange={(event) => setMessage(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      sendMessage(message);
+                    }
+                  }}
+                  placeholder={config.placeholder}
+                  rows={5}
+                  className="min-h-[180px] rounded-[28px] border border-white/10 bg-white/5 p-5 text-sm text-white outline-none placeholder:text-slate-500 focus:border-white/20"
+                />
+                {error && <div className="text-sm text-rose-400">{error}</div>}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <Button
                     variant="secondary"
-                    size="md"
+                    size="lg"
                     onClick={() => {
                       setResponse(null);
                       setMessage("");
+                      setError("");
                     }}
                   >
-                    New session
+                    Reset prompt
                   </Button>
-                )}
-                <Button
-                  variant={mode === "URGE" ? "urge" : "primary"}
-                  size="md"
-                  loading={loading}
-                  onClick={() => sendMessage(message)}
-                >
-                  {mode === "URGE" ? "INTERVENE NOW" : "Send"}
-                </Button>
+                  <Button
+                    variant={mode === "URGE" ? "urge" : "primary"}
+                    size="lg"
+                    loading={loading}
+                    fullWidth
+                    onClick={() => sendMessage(message)}
+                  >
+                    {mode === "URGE" ? "INTERVENE NOW" : "Send coach"}
+                  </Button>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <aside className="space-y-6">
+            <div className="rounded-[32px] border border-white/10 bg-white/5 p-8 shadow-panel backdrop-blur-xl">
+              <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Your momentum</p>
+              <div className="mt-6 grid gap-4">
+                <div className="rounded-3xl bg-black/50 p-4">
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Total urges</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">{user?.totalUrges ?? 0}</p>
+                </div>
+                <div className="rounded-3xl bg-black/50 p-4">
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Discipline score</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">{user?.disciplineScore ?? 0}/100</p>
+                </div>
+                <div className="rounded-3xl bg-black/50 p-4">
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Longest streak</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">{user?.longestStreak ?? 0}d</p>
+                </div>
               </div>
             </div>
-          </motion.div>
-        )}
-      </main>
+
+            <div className="rounded-[32px] border border-white/10 bg-black/70 p-8 shadow-panel backdrop-blur-xl">
+              <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Mini ritual</p>
+              <div className="mt-4 space-y-3 text-sm leading-7 text-slate-300">
+                <p>1. Pause and breathe for 8 seconds.</p>
+                <p>2. Name the urge without reacting.</p>
+                <p>3. Choose one small physical action now.</p>
+              </div>
+            </div>
+
+            <div className="rounded-[32px] border border-white/10 bg-white/5 p-8 shadow-panel backdrop-blur-xl">
+              <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Coach mode guide</p>
+              <div className="mt-5 grid gap-3 text-sm text-slate-300">
+                {Object.entries(modeConfig).map(([key, value]) => (
+                  <div key={key} className="rounded-3xl border border-white/10 bg-black/50 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold text-white">{key}</span>
+                      <span className="text-xs uppercase tracking-[0.25em] text-slate-500">{value.label}</span>
+                    </div>
+                    <p className="mt-2 leading-6 text-slate-400">{value.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
     </div>
   );
 }
 
-// Demo fallback when API is unavailable
-function getDemoResponse(mode: Mode, urgency: number): InterventionResponse {
-  const responses = {
-    URGE: {
-      message:
-        "Stand up right now. Don't think — move. Walk to your kitchen and drink a full glass of cold water. You've already recognized the urge, which means you're already halfway out of it. Set a timer for 90 seconds and do 20 push-ups. The urge peaks and passes. Move.",
-      actionSteps: [
-        "Stand up immediately",
-        "Drink cold water",
-        "20 push-ups — start now",
-      ],
-    },
-    VULNERABILITY: {
-      message:
-        "There's something underneath this feeling that isn't about the urge itself. Loneliness needs connection, not a screen. Boredom needs stimulation, not numbing. Stress needs release, not escape. Name what you actually need right now and choose one real action toward it.",
-      actionSteps: [
-        "Name the actual emotion",
-        "Text one real person",
-        "Do one physical thing",
-      ],
-    },
-    RECOVERY: {
-      message:
-        "You're building something. Every day you choose differently, you're rewriting what's automatic. Your streak isn't just a number — it's evidence that you're someone who does this. Someone who keeps choosing. That's not discipline you're practicing. That's identity you're building.",
-      actionSteps: [
-        "Log today as a win",
-        "Name one thing you're gaining",
-        "Set tomorrow's first action",
-      ],
-    },
-  };
-
-  const r = responses[mode];
-  return {
-    message: r.message,
-    mode,
-    actionSteps: r.actionSteps,
-    urgencyScore: urgency,
-    context: { streak: 0, disciplineScore: 0 },
-  };
-}
-
 export default function CoachPage() {
   return (
-    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#0A0A0B" }} />}>
+    <Suspense fallback={<div className="min-h-screen bg-slate-950" />}>
       <CoachPageInner />
     </Suspense>
   );

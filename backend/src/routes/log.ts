@@ -110,7 +110,7 @@ router.get("/:userId", async (req: Request, res: Response) => {
 
     const logs = await prisma.log.findMany({
       where: {
-        userId,
+        userId: Array.isArray(userId) ? userId[0] : userId,
         ...(type ? { type: type as any } : {}),
       },
       orderBy: { timestamp: "desc" },

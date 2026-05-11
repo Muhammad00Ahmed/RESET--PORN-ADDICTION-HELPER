@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: reset-frontend
+    runtime: node
+    buildCommand: cd frontend && npm install && npm run build
+    startCommand: cd frontend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        value: https://reset-backend.onrender.com
+      - key: DATABASE_URL
+        fromSecret: database_url
+      - key: ANTHROPIC_API_KEY
+        fromSecret: anthropic_api_key
+    plan: starter
+
+  - type: web
+    name: reset-backend
+    runtime: node
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromSecret: database_url
+      - key: ANTHROPIC_API_KEY
+        fromSecret: anthropic_api_key
+      - key: PORT
+        value: 10000
+    plan: starter
+
+databases:
+  - name: reset-db
+    databaseName: reset
+    user: reset_user
+    plan: starter

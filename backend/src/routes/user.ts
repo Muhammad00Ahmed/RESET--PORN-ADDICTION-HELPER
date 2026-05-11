@@ -44,7 +44,7 @@ router.post("/", async (req: Request, res: Response) => {
 router.get("/:id", async (req: Request, res: Response) => {
   try {
     const user = await prisma.user.findUnique({
-      where: { id: req.params.id },
+      where: { id: Array.isArray(req.params.id) ? req.params.id[0] : req.params.id },
       include: {
         logs: {
           orderBy: { timestamp: "desc" },
@@ -85,7 +85,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 router.get("/:id/analytics", async (req: Request, res: Response) => {
   try {
     const user = await prisma.user.findUnique({
-      where: { id: req.params.id },
+      where: { id: Array.isArray(req.params.id) ? req.params.id[0] : req.params.id },
       include: {
         logs: { orderBy: { timestamp: "asc" } },
         triggerPatterns: { orderBy: { frequency: "desc" } },

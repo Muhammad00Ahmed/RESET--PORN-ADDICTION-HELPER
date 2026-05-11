@@ -144,3 +144,75 @@ The app works without a backend — all pages have demo fallbacks with realistic
 - All inputs validated with Zod
 - Helmet.js security headers
 - CORS configured for frontend URL
+
+---
+
+## Deployment
+
+### Vercel (Frontend + API Routes)
+
+1. **Connect Repository**
+   - Import your GitHub repo to Vercel
+   - Set root directory to `frontend/`
+
+2. **Environment Variables**
+   ```
+   DATABASE_URL=postgresql://...
+   ANTHROPIC_API_KEY=sk-ant-...
+   NEXT_PUBLIC_API_URL=https://your-vercel-app.vercel.app
+   ```
+
+3. **Deploy**
+   - Vercel automatically detects Next.js
+   - API routes are deployed as serverless functions
+   - Database migrations run automatically
+
+### Render (Full Stack)
+
+1. **Connect Repository**
+   - Create new Render account
+   - Connect your GitHub repo
+
+2. **Environment Variables** (set in Render dashboard)
+   ```
+   DATABASE_URL=postgresql://...
+   ANTHROPIC_API_KEY=sk-ant-...
+   NEXT_PUBLIC_API_URL=https://reset-frontend.onrender.com
+   ```
+
+3. **Deploy Services**
+   - Use `render.yaml` for automatic service configuration
+   - Creates: Frontend (Next.js), Backend (Node.js), Database (PostgreSQL)
+   - All services deploy simultaneously
+
+4. **Database Setup**
+   ```bash
+   # After database is created, run migrations
+   render psql < prisma/migrations.sql
+   ```
+
+### Manual Deployment
+
+For other platforms, the app is container-ready:
+
+```dockerfile
+# Frontend
+FROM node:18-alpine
+WORKDIR /app
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ .
+RUN npm run build
+EXPOSE 3000
+CMD ["npm", "start"]
+
+# Backend
+FROM node:18-alpine
+WORKDIR /app
+COPY backend/package*.json ./
+RUN npm ci
+COPY backend/ .
+RUN npm run build
+EXPOSE 4000
+CMD ["npm", "start"]
+```

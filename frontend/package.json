@@ -14,16 +14,20 @@
     "@anthropic-ai/sdk": "^0.36.0",
     "@next/swc-linux-x64-gnu": "^16.2.6",
     "@next/swc-linux-x64-musl": "^16.2.6",
+    "@prisma/client": "^5.22.0",
+    "@tailwindcss/postcss": "^4.3.0",
+    "autoprefixer": "^10.4.19",
     "canvas-confetti": "^1.9.3",
     "framer-motion": "^11.11.17",
     "html2canvas": "^1.4.1",
     "next": "15.0.3",
+    "postcss": "^8.4.35",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.13.3",
-    "zustand": "^5.0.1",
-    "@prisma/client": "^5.22.0",
-    "zod": "^3.23.8"
+    "tailwindcss": "^4.3.0",
+    "zod": "^3.23.8",
+    "zustand": "^5.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.9.1",

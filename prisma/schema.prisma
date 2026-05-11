@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model User {
@@ -27,8 +27,8 @@ model User {
 model Session {
   id        String        @id @default(cuid())
   userId    String
-  status    SessionStatus @default(ACTIVE)
-  mode      SessionMode   @default(RECOVERY)
+  status    String        @default("ACTIVE")
+  mode      String        @default("RECOVERY")
   startedAt DateTime      @default(now())
   endedAt   DateTime?
   outcome   String?
@@ -39,7 +39,7 @@ model Session {
 model Log {
   id        String   @id @default(cuid())
   userId    String
-  type      LogType
+  type      String
   emotion   String?
   trigger   String?
   note      String?
@@ -51,7 +51,7 @@ model Log {
 model TriggerPattern {
   id        String      @id @default(cuid())
   userId    String
-  type      TriggerType
+  type      String
   frequency Int         @default(1)
   lastSeen  DateTime    @default(now())
   createdAt DateTime    @default(now())
@@ -60,33 +60,4 @@ model TriggerPattern {
   @@unique([userId, type])
 }
 
-enum SessionStatus {
-  ACTIVE
-  COMPLETED
-  ABANDONED
-}
 
-enum SessionMode {
-  URGE
-  VULNERABILITY
-  RECOVERY
-}
-
-enum LogType {
-  URGE
-  RELAPSE
-  SUCCESS
-  CHECK_IN
-}
-
-enum TriggerType {
-  BOREDOM
-  STRESS
-  LONELINESS
-  ANXIETY
-  ANGER
-  SADNESS
-  LATE_NIGHT
-  IDLE_TIME
-  SOCIAL_REJECTION
-}
