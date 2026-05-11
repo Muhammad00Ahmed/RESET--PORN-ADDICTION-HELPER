@@ -8,6 +8,6 @@
   ],
 
   "env": {
-    "NEXT_PUBLIC_API_URL": ""
+    "NEXT_PUBLIC_API_URL": "https://reset-backend-9ys3.onrender.com"
   }
 }
